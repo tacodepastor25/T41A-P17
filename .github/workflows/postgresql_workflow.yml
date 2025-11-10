@@ -1,0 +1,56 @@
+name: Run PostgreSQL Tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Wait for PostgreSQL
+      run: |
+        sleep 10
+
+    - name: Set up database schema and data
+      run: |
+        PGPASSWORD=postgres psql -h localhost -U postgres -d test_db -f 01_create_tables.sql
+
+    - name: Insert data
+      run: |
+        PGPASSWORD=postgres psql -h localhost -U postgres -d test_db -f 02_insert_data.sql      
+
+    - name: Create procedures, functions and triggers
+      run: |
+        PGPASSWORD=postgres psql -h localhost -U postgres -d test_db -f 03_create_proc_func_trigger.sql          
+        
+
+    - name: Run unit tests and log results
+      run: |
+        PSQL="PGPASSWORD=postgres psql -h localhost -U postgres -d test_db"
+        $PSQL -f unit_tests.sql > test_results.log
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-result
